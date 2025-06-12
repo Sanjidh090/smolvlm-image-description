@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Description App</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .controls, .io-areas {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .io-areas {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        textarea {
+            width: 300px;
+            height: 80px;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        #imagePreview {
+            max-width: 480px;
+            max-height: 360px;
+            border: 2px solid #333;
+            background-color: #eee;
+            border-radius: 8px;
+            object-fit: contain; /* Ensures the image fits within the bounds */
+            display: none; /* Hidden until an image is loaded */
+        }
+        input[type="file"] {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            background-color: #007bff; /* Blue */
+        }
+        label {
+            font-weight: bold;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Image Description App</h1>
+
+    <input type="file" id="imageUpload" accept="image/*">
+    <img id="imagePreview" alt="Image Preview">
+
+    <div class="io-areas">
+        <div>
+            <label for="baseURL">Base API:</label><br>
+            <input id="baseURL" name="Instruction" value="http://localhost:8080">
+        </div>
+        <div>
+            <label for="instructionText">Instruction:</label><br>
+            <textarea id="instructionText" style="height: 2em; width: 40em" name="Instruction"></textarea>
+        </div>
+        <div>
+            <label for="responseText">Response:</label><br>
+            <textarea id="responseText" style="height: 2em; width: 40em" name="Response" readonly placeholder="Server response will appear here..."></textarea>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button id="sendImageButton">Send Image for Description</button>
+    </div>
+
+    <script>
+        const imageUpload = document.getElementById('imageUpload');
+        const imagePreview = document.getElementById('imagePreview');
+        const baseURL = document.getElementById('baseURL');
+        const instructionText = document.getElementById('instructionText');
+        const responseText = document.getElementById('responseText');
+        const sendImageButton = document.getElementById('sendImageButton');
+
+        instructionText.value = "Describe this image in artistic detail."; // default instruction for image description
+
+        let currentBase64Image = null; // To store the base64 of the selected image
+
+        // Returns response text (string)
+        async function sendChatCompletionRequest(instruction, imageBase64URL) {
+            responseText.value = "Sending request...";
+            try {
+                const response = await fetch(`${baseURL.value}/v1/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        max_tokens: 1000,
+                        messages: [
+                            { role: 'user', content: [
+                                { type: 'text', text: instruction },
+                                { type: 'image_url', image_url: {
+                                    url: imageBase64URL,
+                                } }
+                            ] },
+                        ]
+                    })
+                });
+                if (!response.ok) {
+                    const errorData = await response.text();
+                    return `Server error: ${response.status} - ${errorData}`;
+                }
+                const data = await response.json();
+                return data.choices[0].message.content;
+            } catch (error) {
+                console.error('Error sending data:', error);
+                return `Network error: ${error.message}. Make sure your smolvlm server is running and accessible.`;
+            }
+        }
+
+        // Event listener for when a file is selected
+        imageUpload.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    // Display image preview
+                    imagePreview.src = e.target.result;
+                    imagePreview.style.display = 'block';
+                    currentBase64Image = e.target.result; // Store the Base64 URL
+
+                    responseText.value = "Image loaded. Click 'Send Image for Description' to process.";
+                };
+                reader.readAsDataURL(file); // Read the file as a Data URL (Base64)
+            } else {
+                imagePreview.src = '';
+                imagePreview.style.display = 'none';
+                currentBase64Image = null;
+                responseText.value = "No image selected.";
+            }
+        });
+
+        // Event listener for the "Send Image" button
+        sendImageButton.addEventListener('click', async () => {
+            if (!currentBase64Image) {
+                responseText.value = "Please select an image first.";
+                return;
+            }
+
+            const instruction = instructionText.value;
+            const response = await sendChatCompletionRequest(instruction, currentBase64Image);
+            responseText.value = response;
+        });
+
+    </script>
+</body>
+</html>
